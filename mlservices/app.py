@@ -63,12 +63,17 @@ def disease_detection():
     data = request.json or {}
 
     try:
-        # 1️⃣ Read inputs (DO NOT lower-case crop)
+        # ===== Read inputs (MATCH TRAINING EXACTLY) =====
         crop = data.get("crop", "Rice").strip()
-        leaf_color = data.get("leaf_color", "yellow").lower()
-        spot_color = data.get("spot_color", "brown").lower()
+        leaf_color = data.get("leaf_color", "green").lower()
+        leaf_spots = int(data.get("leaf_spots", 0))
+        spot_color = data.get("spot_color", "none").lower()
+        wilting = int(data.get("wilting", 0))
+        mold_presence = int(data.get("mold_presence", 0))
+        temperature = float(data.get("temperature", 25))
+        humidity = float(data.get("humidity", 70))
 
-        # 2️⃣ 🔒 VALIDATION (ADD THIS HERE)
+        # ===== Validation =====
         if crop not in crop_encoder.classes_:
             return jsonify({
                 "error": "Invalid crop",
@@ -87,16 +92,26 @@ def disease_detection():
                 "allowed_spot_colors": list(spot_color_encoder.classes_)
             }), 400
 
-        # 3️⃣ Encode inputs
-        crop_encoded = crop_encoder.transform([crop])[0]
-        leaf_color_encoded = color_encoder.transform([leaf_color])[0]
-        spot_color_encoded = spot_color_encoder.transform([spot_color])[0]
+        # ===== Encode categoricals =====
+        crop_enc = crop_encoder.transform([crop])[0]
+        leaf_color_enc = color_encoder.transform([leaf_color])[0]
+        spot_color_enc = spot_color_encoder.transform([spot_color])[0]
 
-        # 4️⃣ Prepare features
-        X = np.array([[crop_encoded, leaf_color_encoded, spot_color_encoded]])
+        # ===== Feature vector (ORDER IS CRITICAL) =====
+        X = np.array([[
+            crop_enc,
+            leaf_color_enc,
+            leaf_spots,
+            spot_color_enc,
+            wilting,
+            mold_presence,
+            temperature,
+            humidity
+        ]])
+
         X_scaled = disease_scaler.transform(X)
 
-        # 5️⃣ Predict
+        # ===== Predict =====
         pred = disease_model.predict(X_scaled)[0]
         disease = disease_encoder.inverse_transform([pred])[0]
 
@@ -104,7 +119,7 @@ def disease_detection():
             "disease": disease,
             "confidence": 0.78,
             "severity": "Moderate",
-            "reasoning": "ML prediction using crop + leaf symptoms"
+            "reasoning": "ML prediction using crop, symptoms and climate"
         })
 
     except Exception as e:
@@ -112,36 +127,6 @@ def disease_detection():
             "error": "Disease prediction failed",
             "details": str(e)
         }), 500
-
-    data = request.json or {}
-
-    try:
-        crop = data.get("crop", "rice").lower()
-        leaf_color = data.get("leaf_color", "green").lower()
-        spot_color = data.get("spot_color", "none").lower()
-
-        crop_encoded = crop_encoder.transform([crop])[0]
-        leaf_color_encoded = color_encoder.transform([leaf_color])[0]
-        spot_color_encoded = spot_color_encoder.transform([spot_color])[0]
-
-        X = np.array([[crop_encoded, leaf_color_encoded, spot_color_encoded]])
-        X_scaled = disease_scaler.transform(X)
-
-        pred = disease_model.predict(X_scaled)[0]
-        disease = disease_encoder.inverse_transform([pred])[0]
-
-        return jsonify({
-            "disease": disease,
-            "confidence": 0.78,
-            "severity": "Moderate",
-            "reasoning": "ML prediction using crop + leaf symptoms"
-        })
-
-    except Exception as e:
-        return jsonify({
-            "error": "Disease prediction failed",
-            "details": str(e)
-        }), 400
 
 # ================= RUN =================
 if __name__ == "__main__":
